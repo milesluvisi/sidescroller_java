@@ -1,0 +1,507 @@
+<head>
+	<title>Assignment 7</title>
+	<meta charset="UTF-8">
+</head>
+
+<body>
+
+<br>
+
+<canvas id="myCanvas" width="850" height="570" style="border:1px solid #cccccc;"> </canvas>
+
+<script type="text/javascript">
+
+let myid = -1;
+function httpPost(url, payload, callback)
+{
+	let request = new XMLHttpRequest();
+	request.onreadystatechange = function()
+	{
+		if(request.readyState == 4)
+		{
+			if(request.status == 200)
+			callback(request.responseText);
+			else
+			{
+				if(request.status == 0 && request.statusText.length == 0)
+					alert("Connection failed");
+				else
+					alert("Server returned status " + request.status + ", " + request.statusText);
+			}
+		}
+	};
+	request.open('post', url, true);
+	request.setRequestHeader('Content-Type',
+	'application/x-www-form-urlencoded');
+	request.send(payload);
+}
+
+function cb(response)
+{
+	//alert("The back-end server replied: " + response);
+
+	// Parse the JSON
+	let ob = JSON.parse(response);
+	myid = ob.id;
+
+	//alert("The server's favorite number is: " + ob.fav_num);
+}
+
+/*function sayhi()
+{
+	// Find the text field
+	let msg = document.getElementById("mymessage");
+
+	// Make a JSON blob
+	let ob = {};
+	ob.message = msg.value;
+	ob.fav_num = 3.14159;
+	let json_string = JSON.stringify(ob);
+
+	// Send the JSON blob to the server
+	httpPost("ajax_handler.html", json_string, cb);
+}*/
+
+class Sprite
+{
+	constructor(model, type, x, y, w, h, image_url, update_method)
+	{
+		this.model = model;
+		this.x = x;
+		this.y = y;
+		this.w = w;
+		this.h = h;
+		this.type = type;
+		this.image = new Image();
+		this.image.src = image_url;
+		this.update = update_method;
+		//this.onclick = onclick_method;
+		
+		//Type differentiators
+		if(type == "mario")
+		{
+			this.x_prev = 0;
+			this.y_prev = 0;
+			this.vvel = 0.0;
+			this.time_since_jump = 0;
+		}
+
+		if(type == "cb")
+		{
+			this.coins = 6;
+		}
+
+		if(type == "coin")
+		{
+			this.vvel = -10;
+			this.hvel = Math.random() * 32.5;
+		}
+	}
+	
+	//Collision detection
+	//Repalced x_pos, y_pos, w_pos, h_pos with this. and x y w h with that. 
+	//because s.x s.y s.w and s.h was throwing an error
+	//this. seems more consistent since collision functions moved from mario class to sprite
+	does_collide(that)
+	{
+		if(that.x + that.w <= this.x)
+			return false;
+			
+		if(that.x >= this.x + this.w)
+			return false;
+			
+		if(that.y + that.h <= this.y)
+			return false;
+			
+		if(that.y >= this.y + this.h)
+			return false;
+			
+		return true;
+	}
+
+	//Collision fixing
+	collision_displacement(that)
+	{
+		//top
+		if(that.y + that.h >= this.y && that.y_prev + that.h <= this.y)// coming from the top
+		{
+			that.vvel = 0;
+			that.y = this.y - that.h;
+			that.time_since_jump = 0;
+		}
+		
+		//bottom
+		if(that.y <= this.y + this.h && that.y_prev >= this.y + this.h) //coming from the bottom.
+		{
+			if(this.type == "brick")
+			{
+				that.y = this.y + this.h;
+				that.vvel = 8;
+			}
+			
+		//coin production
+		if(this.type == "cb")
+		{
+			that.y = this.y + this.h;
+			that.vvel = 2.4;
+			that.time_since_jump = 5;
+			this.coins -= 1;
+			if(this.coins > 0)
+			{
+				this.model.sprites.push(new Sprite(this, "coin", this.x, this.y, 40, 40, "coin.png", Sprite.prototype.update_coins));
+			}		
+		}
+		}
+		
+		//left
+		if(that.x + that.w >= this.x && that.x_prev + that.w <= this.x) //coming in from the left
+		{
+			that.x = this.x - that.w;
+		}
+		
+		//right
+		if( that.x <= this.x + this.w && that.x_prev >= this.x + this.w)
+		{
+			that.x = this.x + this.w;
+		}		
+	}
+	
+	update_mario()
+	{
+		this.model.scrollPos = this.x - 100;
+		this.vvel += 4.5;
+		this.y += this.vvel;
+
+		if(this.y >= 480)
+		{
+			this.y = 480;
+			this.vvel = 0;
+		}
+		
+		if(this.x >= 850)
+		{
+			this.x = 850;
+		}
+		
+		if(this.x <= 0)
+		{
+			this.x = 0;
+		}
+		
+		//velocity 0 = on ground
+		if(this.vvel == 0)
+		{
+			this.time_since_jump = 0;
+		}
+
+		else
+		{
+			this.time_since_jump++;
+		}
+	}
+
+	update_brick()
+	{
+		for(var i = 0; i < this.model.sprites.length; i++)
+		{
+			var s = this.model.sprites[i];
+			//collide with maro but not coins
+			if(s.type == "mario")
+			{
+				if(this.does_collide(s))
+					this.collision_displacement(s);
+			}
+		}
+	}
+
+	update_cb()
+	{
+		for(var i = 0; i < this.model.sprites.length; i++)
+		{
+			var s = this.model.sprites[i];
+			//collide with mario and not coins
+			if(s.type == "mario")
+			{
+				if(this.does_collide(s))
+					this.collision_displacement(s);
+			}
+		}
+
+		if(this.coins <= 0)
+		{
+			this.coins = 0;
+		}
+		
+		if(this.coins > 6)
+		{
+			this.coins = 6;
+		}
+	}
+
+	update_coins()
+	{
+		this.vvel += 6.7;
+		this.y += this.vvel;
+		this.x += this.hvel;
+
+	}
+
+	location_tracker()
+	{
+		this.x_prev = this.x;
+		this.y_prev = this.y;
+	}
+
+	
+	
+
+/*
+	set_destination(x, y)
+	{
+	
+		this.dest_x = x;
+		this.dest_y = y;
+	}
+
+	ignore_click(x, y, w, h)
+	{
+	}
+
+	move(dx, dy)
+	{
+		this.dest_x = this.x + dx;
+		this.dest_y = this.y + dy;
+	}
+
+	go_toward_destination()
+	{
+		if(this.dest_x === undefined)
+			return;
+
+		if(this.x < this.dest_x)
+			this.x++;
+		else if(this.x > this.dest_x)
+			this.x--;
+		if(this.y < this.dest_y)
+			this.y++;
+		else if(this.y > this.dest_y)
+			this.y--;
+	}
+
+	sit_still()
+	{
+	}*/
+
+
+}
+
+class Model
+{
+	constructor()
+	{
+		this.scrollPos = 0;
+		this.sprites = [];
+		//this.sprites.push(new Sprite(200, 100, "lettuce.png", Sprite.prototype.sit_still, Sprite.prototype.ignore_click));
+		this.mario = new Sprite(this, "mario", 0, 0, 60, 95, "mario1.png", Sprite.prototype.update_mario);
+		this.sprites.push(this.mario);
+		this.sprites.push(new Sprite(this, "cb", 700, 350, 75, 75, "cb1.png", Sprite.prototype.update_cb));
+		this.sprites.push(new Sprite(this, "brick", 100, 550, 200, 50, "brick.png", Sprite.prototype.update_brick));
+		/*this.sprites.push(this.coinblock);
+		this.sprites.push(this.brick);*/
+		this.sprites.push(new Sprite(this, "brick", 600, 400, 50, 50, "brick.png", Sprite.prototype.update_brick));
+		this.sprites.push(new Sprite(this, "cb", 800, 350, 75, 75, "cb1.png", Sprite.prototype.update_cb));
+		this.sprites.push(new Sprite(this, "brick", 50, 400, 50, 50, "brick.png", Sprite.prototype.update_brick));
+	}
+
+	update()
+	{
+		this.scrollPos = this.mario.x - 100;
+		for(var i = 0; i < this.sprites.length; i++)
+		{
+			this.sprites[i].update();
+		}
+	}
+	
+	/*onclick(x, y)
+	{
+		for(var i = 0; i < this.sprites.length; i++)
+		{
+			this.sprites[i].onclick(x, y);
+		}
+	}
+
+	move(dx, dy)
+	{
+		this.mario.move(dx, dy);
+	}
+	
+	location_tracker()
+	{
+		mario.location_tracker();
+	}*/
+}
+
+class View
+{
+	constructor(model)
+	{
+		this.model = model;
+		this.canvas = document.getElementById("myCanvas");
+		//bring in background
+		this.background = new Image();
+		this.background.src = "background.png";
+	}
+
+	update()
+	{
+		var ctx = this.canvas.getContext("2d");
+		ctx.clearRect(0, 0, 850, 570);
+		//background load, Scrolling element
+		ctx.drawImage(this.background, -this.model.mario.x/1.23, 0);
+		for(var i = 0; i < this.model.sprites.length; i++)
+		{
+			var sprite = this.model.sprites[i];
+			//Tried to get feet in time with speed on movements
+			if (sprite.type == "mario")
+			{
+				if ((Math.abs(sprite.x/60)) % 5 == 0)
+					sprite.image.src = "mario1.png";
+				else if ((Math.abs(sprite.x/60)) % 5 == 1)
+					sprite.image.src = "mario2.png";
+				else if ((Math.abs(sprite.x/60)) % 5 == 2)
+					sprite.image.src = "mario3.png";
+				else if ((Math.abs(sprite.x/60)) % 5 == 3)
+					sprite.image.src = "mario4.png";
+				else if ((Math.abs(sprite.x/60)) % 5 == 4)
+					sprite.image.src = "mario5.png";
+			}
+
+			if(sprite.type == "cb")
+			{
+				//Coin block wasn't disappearing until after the last
+				//coin no matter how many coins i set so i hard coded a fix
+				if(sprite.coins > 1)
+					sprite.image.src = "cb1.png";
+				else
+					sprite.image.src = "cb2.png";
+			}
+			
+			ctx.drawImage(sprite.image, sprite.x - this.model.scrollPos, sprite.y, sprite.w, sprite.h);
+		}
+	}
+}
+
+class Controller
+{
+	constructor(model, view)
+	{
+		this.model = model;
+		this.view = view;
+		this.key_right = false;
+		this.key_left = false;
+		//this.key_up = false;
+		//this.key_down = false;
+		this.key_space = false;
+		var self = this;
+		//view.canvas.addEventListener("click", function(event) { self.onClick(event); });
+		document.addEventListener('keydown', function(event) { self.keyDown(event); }, false);
+		document.addEventListener('keyup', function(event) { self.keyUp(event); }, false);
+	}
+	
+	/*onClick(event)
+	{
+		this.model.onclick(event.pageX - this.view.canvas.offsetLeft, event.pageY - this.view.canvas.offsetTop);
+	}*/
+	
+	keyDown(event)
+	{
+		if(event.keyCode == 39) this.key_right = true;
+		else if(event.keyCode == 37) this.key_left = true;
+		//else if(event.keyCode == 38) this.key_up = true;
+		//else if(event.keyCode == 40) this.key_down = true;
+		else if(event.keyCode == 32) this.key_space = true;
+	}
+	
+	keyDown(event)
+	{
+		if(event.keyCode == 39) this.key_right = true;
+		else if(event.keyCode == 37) this.key_left = true;
+		//else if(event.keyCode == 38) this.key_up = true;
+		//else if(event.keyCode == 40) this.key_down = true;
+		else if(event.keyCode == 32) this.key_space = true;
+	}
+
+	keyUp(event)
+	{
+		if(event.keyCode == 39) this.key_right = false;
+		else if(event.keyCode == 37) this.key_left = false;
+		//else if(event.keyCode == 38) this.key_up = true;
+		//else if(event.keyCode == 40) this.key_down = true;
+		else if(event.keyCode == 32) this.key_space = false;
+	}
+
+	contactserver()
+	{
+		//Make a JSON blob
+		let ob = {};
+		ob.id = myid;
+		let json_string = JSON.stringify(ob);
+		
+		httpPost("ajax_handler.html", json_string, cb);
+		
+	update()
+	{
+		this.model.mario.location_tracker();
+		
+		//Right velocity
+		if(this.key_right)
+		{
+			this.model.mario.x += 10;
+		}
+		//Left Velocity
+		if(this.key_left) this.model.mario.x -= 10;
+		if(this.key_space)
+		{
+			if(this.model.mario.time_since_jump < 5)
+				this.model.mario.vvel -= 8;		
+		}
+		
+		if(this.framecounter == undefined)
+			this.framecounter = 0;
+		this.framecounter++;
+		if(this.framecounter > 10)
+		{
+			this.framecounter = 0;
+			contactserver();
+		}
+			
+	}
+}
+
+
+
+
+
+class Game
+{
+	constructor()
+	{
+		this.model = new Model();
+		this.view = new View(this.model);
+		this.controller = new Controller(this.model, this.view);
+	}
+
+	Recurrence()
+	{
+		this.controller.update();
+		this.model.update();
+		this.view.update();
+	}
+}
+
+var game = new Game();
+var timer = setInterval(function() { game.Recurrence(); }, 40);
+
+</script>
+
+</body>
